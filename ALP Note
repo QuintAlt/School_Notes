@@ -1,0 +1,247 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+enum { MAX_JOGADORES = 4, NOME_TAM = 50, MAX_PARTIDAS = 50 };
+
+typedef struct {
+    char nome[NOME_TAM];
+    double pontos;
+    int partidas;
+} Jogador;
+
+typedef struct {
+    int idxBrancas;
+    int idxPretas;
+    int resultado; // 0 = pendente, 1 = brancas venc., 2 = pretas venc., 3 = empate
+} Partida;
+
+static Jogador jogadores[MAX_JOGADORES];
+static Partida partidas[MAX_PARTIDAS];
+static int totalJogadores = 0;
+static int totalPartidas = 0;
+
+/* leitura segura de linha */
+void read_line(char *buf, int size) {
+    if (fgets(buf, size, stdin) == NULL) {
+        buf[0] = '\0';
+        return;
+    }
+    size_t len = strlen(buf);
+    if (len > 0 && buf[len - 1] == '\n') buf[len - 1] = '\0';
+}
+
+/* leitura segura de inteiro com prompt */
+int read_int(const char *prompt) {
+    char tmp[128];
+    int v;
+    while (1) {
+        printf("%s", prompt);
+        if (fgets(tmp, sizeof(tmp), stdin) == NULL) return 0;
+        if (sscanf(tmp, "%d", &v) == 1) return v;
+        printf("Entrada inválida. Tente novamente.\n");
+    }
+}
+
+int encontrarJogador(const char *nome) {
+    for (int i = 0; i < totalJogadores; i++)
+        if (strcmp(jogadores[i].nome, nome) == 0) return i;
+    return -1;
+}
+
+int adicionarJogador(const char *nome) {
+    if (totalJogadores >= MAX_JOGADORES) return -1;
+    if (encontrarJogador(nome) != -1) return encontrarJogador(nome);
+    strncpy(jogadores[totalJogadores].nome, nome, NOME_TAM - 1);
+    jogadores[totalJogadores].nome[NOME_TAM - 1] = '\0';
+    jogadores[totalJogadores].pontos = 0.0;
+    jogadores[totalJogadores].partidas = 0;
+    totalJogadores++;
+    return totalJogadores - 1;
+}
+
+void cadastrarJogadores() {
+    char nome[NOME_TAM];
+    printf("Cadastre os %d jogadores do campeonato:\n", MAX_JOGADORES);
+    for (int i = 0; i < MAX_JOGADORES; i++) {
+        printf("Nome do jogador %d: ", i + 1);
+        read_line(nome, NOME_TAM);
+        if (nome[0] == '\0') {
+            printf("Nome vazio. Digite novamente.\n");
+            i--;
+            continue;
+        }
+        if (encontrarJogador(nome) != -1) {
+            printf("Jogador já cadastrado. Escolha outro nome.\n");
+            i--;
+            continue;
+        }
+        adicionarJogador(nome);
+    }
+}
+
+void listarJogadores() {
+    printf("\nJogadores cadastrados:\n");
+    for (int i = 0; i < totalJogadores; i++)
+        printf("%d - %s\n", i + 1, jogadores[i].nome);
+}
+
+/* registra uma partida indicando quem joga de brancas/pretas */
+void registrarPartida() {
+    if (totalJogadores < MAX_JOGADORES) {
+        printf("Ainda não há os %d jogadores cadastrados.\n", MAX_JOGADORES);
+        return;
+    }
+    if (totalPartidas >= MAX_PARTIDAS) {
+        printf("Limite de partidas atingido.\n");
+        return;
+    }
+
+    listarJogadores();
+    int b = read_int("Escolha (número) o jogador que será BRANCAS: ");
+    int p = read_int("Escolha (número) o jogador que será PRETAS: ");
+
+    if (b < 1 || b > totalJogadores || p < 1 || p > totalJogadores) {
+        printf("Índice inválido.\n");
+        return;
+    }
+    if (b == p) {
+        printf("Um jogador não pode jogar contra ele mesmo.\n");
+        return;
+    }
+
+    partidas[totalPartidas].idxBrancas = b - 1;
+    partidas[totalPartidas].idxPretas = p - 1;
+    partidas[totalPartidas].resultado = 0; // pendente
+    totalPartidas++;
+    printf("Partida registrada: %s (Brancas) x %s (Pretas).\n",
+           jogadores[b - 1].nome, jogadores[p - 1].nome);
+}
+
+/* Aplica ou remove resultado nos jogadores (mult = +1 aplicar, -1 remover) */
+void aplicarResultado(int idxPartida, int resultado, int mult) {
+    if (idxPartida < 0 || idxPartida >= totalPartidas) return;
+    int jb = partidas[idxPartida].idxBrancas;
+    int jp = partidas[idxPartida].idxPretas;
+    if (resultado == 1) {
+        jogadores[jb].pontos += mult * 1.0;
+        jogadores[jb].partidas += mult;
+        jogadores[jp].partidas += mult;
+    } else if (resultado == 2) {
+        jogadores[jp].pontos += mult * 1.0;
+        jogadores[jb].partidas += mult;
+        jogadores[jp].partidas += mult;
+    } else if (resultado == 3) {
+        jogadores[jb].pontos += mult * 0.5;
+        jogadores[jp].pontos += mult * 0.5;
+        jogadores[jb].partidas += mult;
+        jogadores[jp].partidas += mult;
+    }
+}
+
+/* registra resultado (substitui resultado anterior se houver) */
+void registrarPontos() {
+    if (totalPartidas == 0) {
+        printf("Nenhuma partida registrada.\n");
+        return;
+    }
+    printf("\nPartidas:\n");
+    for (int i = 0; i < totalPartidas; i++) {
+        const char *resStr = "Pendente";
+        if (partidas[i].resultado == 1) resStr = "Brancas venceram";
+        else if (partidas[i].resultado == 2) resStr = "Pretas venceram";
+        else if (partidas[i].resultado == 3) resStr = "Empate";
+        printf("%d - %s (B) x %s (P) -> %s\n", i + 1,
+               jogadores[partidas[i].idxBrancas].nome,
+               jogadores[partidas[i].idxPretas].nome,
+               resStr);
+    }
+
+    int escolha = read_int("Escolha a partida (número) para registrar/atualizar resultado: ");
+    if (escolha < 1 || escolha > totalPartidas) {
+        printf("Partida inválida.\n");
+        return;
+    }
+    escolha--; // índice real
+
+    /* se já tiver resultado, removemos seus efeitos antes de aplicar novo */
+    int anterior = partidas[escolha].resultado;
+    if (anterior != 0) {
+        aplicarResultado(escolha, anterior, -1);
+    }
+
+    printf("Resultado:\n");
+    printf("1 - %s (Brancas) venceu\n", jogadores[partidas[escolha].idxBrancas].nome);
+    printf("2 - %s (Pretas) venceu\n", jogadores[partidas[escolha].idxPretas].nome);
+    printf("3 - Empate\n");
+    int novo = read_int("Escolha (1/2/3): ");
+    if (novo < 1 || novo > 3) {
+        printf("Opção inválida. Operação cancelada.\n");
+        /* se havia anterior, reaplicamos para não perder dados */
+        if (anterior != 0) aplicarResultado(escolha, anterior, +1);
+        return;
+    }
+
+    partidas[escolha].resultado = novo;
+    aplicarResultado(escolha, novo, +1);
+    printf("Resultado registrado com sucesso.\n");
+}
+
+void exibirPlacar() {
+    printf("\n------ PLACAR ------\n");
+    for (int i = 0; i < totalJogadores; i++) {
+        printf("%s - %.1f pontos (%d partidas)\n",
+               jogadores[i].nome, jogadores[i].pontos, jogadores[i].partidas);
+    }
+    printf("--------------------\n");
+}
+
+void exibirRanking() {
+    if (totalJogadores == 0) {
+        printf("Nenhum jogador cadastrado.\n");
+        return;
+    }
+    Jogador copia[MAX_JOGADORES];
+    for (int i = 0; i < totalJogadores; i++) copia[i] = jogadores[i];
+
+    /* ordena por pontos decrescente (bubble/selection simples) */
+    for (int i = 0; i < totalJogadores - 1; i++) {
+        for (int j = i + 1; j < totalJogadores; j++) {
+            if (copia[j].pontos > copia[i].pontos) {
+                Jogador tmp = copia[i];
+                copia[i] = copia[j];
+                copia[j] = tmp;
+            }
+        }
+    }
+
+    printf("\n------ RANKING ------\n");
+    for (int i = 0; i < totalJogadores; i++) {
+        printf("%dº %s - %.1f pontos\n", i + 1, copia[i].nome, copia[i].pontos);
+    }
+    printf("---------------------\n");
+}
+
+int main(void) {
+    cadastrarJogadores();
+
+    while (1) {
+        printf("\n------------- MENU -------------\n");
+        printf("1 - Registrar Partida\n");
+        printf("2 - Registrar Pontos da Partida\n");
+        printf("3 - Exibir Placar\n");
+        printf("4 - Exibir Ranking\n");
+        printf("5 - Sair\n");
+        printf("--------------------------------\n");
+        int opc = read_int("Escolha: ");
+        switch (opc) {
+            case 1: registrarPartida(); break;
+            case 2: registrarPontos(); break;
+            case 3: exibirPlacar(); break;
+            case 4: exibirRanking(); break;
+            case 5: printf("Saindo...\n"); return 0;
+            default: printf("Opção inválida.\n");
+        }
+    }
+    return 0;
+}
